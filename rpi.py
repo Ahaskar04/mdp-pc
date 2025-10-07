@@ -42,7 +42,7 @@ def handle_pc_logs(conn):
     global non_marker_count, marker_count
 
     while True:
- try:
+        try:
             data = conn.recv(1024).decode('utf-8')
             if not data:
                 break

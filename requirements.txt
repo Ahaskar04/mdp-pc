@@ -1,0 +1,5 @@
+
+pyserial 
+picamera 
+requests 
+opencv-python
