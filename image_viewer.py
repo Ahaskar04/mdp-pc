@@ -15,6 +15,27 @@ TILE_HEIGHT = 480
 TILES_PER_ROW = 3
 BACKGROUND_COLOR = (50, 50, 50)
 
+# ---- IMAGE ID MAPPING ----
+IMAGE_ID_MAP = {
+    # Numbers
+    '11': 'Number 1', '12': 'Number 2', '13': 'Number 3',
+    '14': 'Number 4', '15': 'Number 5', '16': 'Number 6',
+    '17': 'Number 7', '18': 'Number 8', '19': 'Number 9',
+    
+    # Letters
+    '20': 'Alphabet A', '21': 'Alphabet B', '22': 'Alphabet C',
+    '23': 'Alphabet D', '24': 'Alphabet E', '25': 'Alphabet F',
+    '26': 'Alphabet G', '27': 'Alphabet H', '28': 'Alphabet S',
+    '29': 'Alphabet T', '30': 'Alphabet U', '31': 'Alphabet V',
+    '32': 'Alphabet W', '33': 'Alphabet X', '34': 'Alphabet Y',
+    '35': 'Alphabet Z',
+    
+    # Arrows and symbols
+    '36': 'Up Arrow', '37': 'Down Arrow',
+    '38': 'Left Arrow', '39': 'Right Arrow',
+    '40': 'Circle',
+}
+
 def load_images_from_directory(directory):
     """Load all captured images from the directory."""
     image_files = []
@@ -32,16 +53,21 @@ def load_images_from_directory(directory):
     return image_files
 
 def extract_info_from_filename(filename):
-    """Extract obstacle ID and target ID from filename."""
-    # Format: obs{obstacle_id}_target{target_id}_{timestamp}_raw.jpg
+    """Extract obstacle ID and image ID from filename."""
+    # Format: obs{obstacle_id}_img{image_id}_{timestamp}_raw.jpg
     basename = os.path.basename(filename)
     try:
         parts = basename.split('_')
         obstacle_id = parts[0].replace('obs', '')
-        target_id = parts[1].replace('target', '')
-        return obstacle_id, target_id
-    except:
-        return "?", "?"
+        image_id = parts[1].replace('img', '')
+        
+        # Get display name from image ID
+        display_name = IMAGE_ID_MAP.get(image_id, f'Unknown ({image_id})')
+        
+        return obstacle_id, image_id, display_name
+    except Exception as e:
+        print(f"Error parsing filename {filename}: {e}")
+        return "?", "?", "Unknown"
 
 def create_tiled_display(image_paths, tiles_per_row=3):
     """Create a tiled grid display of all images."""
@@ -61,16 +87,25 @@ def create_tiled_display(image_paths, tiles_per_row=3):
             img_resized = cv2.resize(img, (TILE_WIDTH, TILE_HEIGHT))
             
             # Extract info for label
-            obs_id, target_id = extract_info_from_filename(img_path)
-            label = f"Obs:{obs_id} → {target_id}"
+            obs_id, img_id, display_name = extract_info_from_filename(img_path)
             
-            # Add label to image
-            cv2.putText(img_resized, label, (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            # Create label text (matching lab PDF format)
+            line1 = f"{display_name}"
+            line2 = f"Image ID = {img_id}"
+            
+            # Add labels with dark background for readability
+            cv2.rectangle(img_resized, (10, 10), (630, 100), (0, 0, 0), -1)
+            
+            # Add character/symbol name
+            cv2.putText(img_resized, line1, (20, 45),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.2, (100, 200, 255), 2)
+            # Add image ID
+            cv2.putText(img_resized, line2, (20, 85),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
             
             images.append(img_resized)
-            labels.append(label)
-            print(f"✅ Loaded: {label}")
+            labels.append(f"{display_name} (ID:{img_id})")
+            print(f"✅ Loaded: {display_name} - Image ID = {img_id}")
     
     if not images:
         print("❌ No valid images loaded")
@@ -139,7 +174,7 @@ def main():
         key = cv2.waitKey(100) & 0xFF
         
         if key == ord('s') or key == ord('S'):
-            output_path = "tiled_results.jpg"
+            output_path = "tiled_results_viewer.jpg"
             cv2.imwrite(output_path, tiled_image, [cv2.IMWRITE_JPEG_QUALITY, 95])
             print(f"✅ Saved tiled image to: {output_path}")
         elif key != 255:  # Any other key pressed

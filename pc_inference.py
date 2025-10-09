@@ -25,7 +25,52 @@ ACTIVE_SNAP_ID = None
 SNAP_ARMED = False
 
 # Store detected images for tiling
-DETECTED_IMAGES = []  # List of tuples: (obstacle_id, target_name, annotated_image)
+DETECTED_IMAGES = []  # List of tuples: (obstacle_id, display_name, image_id, annotated_image)
+
+# ---- IMAGE ID MAPPING ----
+# Maps model class names to their display names and image IDs
+IMAGE_ID_MAP = {
+    # Numbers 11-19 in model → 1-9 in dataset
+    '11': {'name': 'Number 1', 'id': '1'},
+    '12': {'name': 'Number 2', 'id': '2'},
+    '13': {'name': 'Number 3', 'id': '3'},
+    '14': {'name': 'Number 4', 'id': '4'},
+    '15': {'name': 'Number 5', 'id': '5'},
+    '16': {'name': 'Number 6', 'id': '6'},
+    '17': {'name': 'Number 7', 'id': '7'},
+    '18': {'name': 'Number 8', 'id': '8'},
+    '19': {'name': 'Number 9', 'id': '9'},
+    
+    # Letters 20-32 in model → a-z in dataset
+    '20': {'name': 'Alphabet A', 'id': 'a'},
+    '21': {'name': 'Alphabet B', 'id': 'b'},
+    '22': {'name': 'Alphabet C', 'id': 'c'},
+    '23': {'name': 'Alphabet D', 'id': 'd'},
+    '24': {'name': 'Alphabet E', 'id': 'e'},
+    '25': {'name': 'Alphabet F', 'id': 'f'},
+    '26': {'name': 'Alphabet G', 'id': 'g'},
+    '27': {'name': 'Alphabet H', 'id': 'h'},
+    '28': {'name': 'Alphabet S', 'id': 's'},
+    '29': {'name': 'Alphabet T', 'id': 't'},
+    '30': {'name': 'Alphabet U', 'id': 'u'},
+    '31': {'name': 'Alphabet V', 'id': 'v'},
+    '32': {'name': 'Alphabet W', 'id': 'w'},
+    '33': {'name': 'Alphabet X', 'id': 'x'},
+    '34': {'name': 'Alphabet Y', 'id': 'y'},
+    '35': {'name': 'Alphabet Z', 'id': 'z'},
+    
+    # Arrows and symbols
+    '36': {'name': 'Up Arrow', 'id': 'up'},
+    '37': {'name': 'Down Arrow', 'id': 'down'},
+    '38': {'name': 'Left Arrow', 'id': 'left'},
+    '39': {'name': 'Right Arrow', 'id': 'right'},
+    '40': {'name': 'Circle', 'id': 'circle'},
+}
+
+def get_display_info(model_class_name):
+    """Get display name and image ID from model class name."""
+    info = IMAGE_ID_MAP.get(str(model_class_name), {'name': f'Unknown ({model_class_name})', 'id': model_class_name})
+    return info['name'], info['id']
 
 # ---- Utility Functions ----
 def recv_exact(sock, n):
@@ -38,27 +83,25 @@ def recv_exact(sock, n):
         buf.extend(chunk)
     return bytes(buf)
 
-def save_detection_image(obstacle_id, target_name, raw_img, annotated_img):
+def save_detection_image(obstacle_id, target_name, display_name, image_id, raw_img, annotated_img):
     """
     Save both raw and annotated images locally with proper naming convention.
-    Format: obs{ID}_target{NAME}_{timestamp}_raw.jpg
-    This matches the requirement for displaying RAW images with bounding boxes.
+    Format: obs{ID}_img{image_id}_{timestamp}_raw.jpg
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Save annotated RAW image with bounding box (THIS IS THE MAIN IMAGE FOR DISPLAY)
-    # Using the format that matches the viewer expectations
-    raw_annotated_filename = os.path.join(SAVE_DIR, f"obs{obstacle_id}_target{target_name}_{timestamp}_raw.jpg")
+    # Save annotated RAW image with bounding box
+    raw_annotated_filename = os.path.join(SAVE_DIR, f"obs{obstacle_id}_img{image_id}_{timestamp}_raw.jpg")
     cv2.imwrite(raw_annotated_filename, annotated_img, [cv2.IMWRITE_JPEG_QUALITY, 95])
     print(f"✅ Saved RAW image with bounding box: {raw_annotated_filename}")
     
-    # Optionally save the pure raw image without annotations (for reference)
-    pure_raw_filename = os.path.join(SAVE_DIR, f"obs{obstacle_id}_target{target_name}_{timestamp}_pure.jpg")
+    # Save pure raw image without annotations
+    pure_raw_filename = os.path.join(SAVE_DIR, f"obs{obstacle_id}_img{image_id}_{timestamp}_pure.jpg")
     cv2.imwrite(pure_raw_filename, raw_img, [cv2.IMWRITE_JPEG_QUALITY, 95])
     print(f"📸 Saved pure raw image (no bbox): {pure_raw_filename}")
     
     # Add to global list for tiled display
-    DETECTED_IMAGES.append((obstacle_id, target_name, annotated_img.copy()))
+    DETECTED_IMAGES.append((obstacle_id, display_name, image_id, annotated_img.copy()))
     
     # Update tiled display
     update_tiled_display()
@@ -68,46 +111,46 @@ def save_detection_image(obstacle_id, target_name, raw_img, annotated_img):
 def update_tiled_display():
     """
     Create a tiled display of all detected images in one window.
-    This provides real-time visualization of all detections during the run.
+    Shows character name and image ID for each detection.
     """
     if not DETECTED_IMAGES:
         return
     
     num_images = len(DETECTED_IMAGES)
     
-    # Calculate grid dimensions (e.g., 3 columns max)
-    cols = min(3, num_images)  # Max 3 images per row
+    # Calculate grid dimensions (3 columns max)
+    cols = min(3, num_images)
     rows = (num_images + cols - 1) // cols
     
     # Resize all images to same size for tiling
-    tile_size = (320, 240)  # Width x Height for each tile
+    tile_size = (400, 300)  # Slightly larger for better visibility
     tiles = []
     
-    for obstacle_id, target_name, img in DETECTED_IMAGES:
+    for obstacle_id, display_name, image_id, img in DETECTED_IMAGES:
         # Resize image
         resized = cv2.resize(img, tile_size)
         
-        # Add label with obstacle ID and target name
-        label_bg = f"Obstacle: {obstacle_id}"
-        label_target = f"Target: {target_name}"
+        # Create label text
+        line1 = f"{display_name}"
+        line2 = f"Image ID = {image_id}"
         
         # Dark background for text readability
-        cv2.rectangle(resized, (5, 5), (310, 60), (0, 0, 0), -1)
+        cv2.rectangle(resized, (5, 5), (390, 80), (0, 0, 0), -1)
         
-        # Add obstacle ID
-        cv2.putText(resized, label_bg, (10, 25), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 200, 255), 2)
-        # Add target name
-        cv2.putText(resized, label_target, (10, 50), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        # Add character/symbol name
+        cv2.putText(resized, line1, (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 200, 255), 2)
+        # Add image ID
+        cv2.putText(resized, line2, (10, 60), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         tiles.append(resized)
     
     # Pad with blank images if needed to fill grid
     while len(tiles) < rows * cols:
         blank = np.zeros((tile_size[1], tile_size[0], 3), dtype=np.uint8)
-        cv2.putText(blank, "Empty", (tile_size[0]//2 - 40, tile_size[1]//2), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 100, 100), 2)
+        cv2.putText(blank, "Empty", (tile_size[0]//2 - 50, tile_size[1]//2), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.9, (100, 100, 100), 2)
         tiles.append(blank)
     
     # Create grid
@@ -149,15 +192,19 @@ def save_final_tiled_image():
     tile_size = (640, 480)  # Larger tiles for final save
     tiles = []
     
-    for obstacle_id, target_name, img in DETECTED_IMAGES:
+    for obstacle_id, display_name, image_id, img in DETECTED_IMAGES:
         resized = cv2.resize(img, tile_size)
         
-        # Add labels
-        cv2.rectangle(resized, (10, 10), (630, 80), (0, 0, 0), -1)
-        cv2.putText(resized, f"Obstacle: {obstacle_id}", (20, 40), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1.0, (100, 200, 255), 2)
-        cv2.putText(resized, f"Target: {target_name}", (20, 70), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+        # Create label text
+        line1 = f"{display_name}"
+        line2 = f"Image ID = {image_id}"
+        
+        # Add labels with dark background
+        cv2.rectangle(resized, (10, 10), (630, 100), (0, 0, 0), -1)
+        cv2.putText(resized, line1, (20, 45), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.2, (100, 200, 255), 2)
+        cv2.putText(resized, line2, (20, 85), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
         
         tiles.append(resized)
     
@@ -260,32 +307,55 @@ def main():
             # --- IMAGE DETECTION LOGIC ---
             if SNAP_ARMED and ACTIVE_SNAP_ID and ACTIVE_SNAP_ID != last_sent_snap_id:
                 if results and results[0].boxes and len(results[0].boxes) > 0:
-                    # Choose the highest-confidence detection
                     boxes = results[0].boxes
+                    classes = boxes.cls.cpu().numpy()
                     confs = boxes.conf.cpu().numpy()
-                    best_idx = int(np.argmax(confs))
-                    top_cls_id = int(boxes.cls[best_idx])
+                    
+                    # ✅ FILTER OUT MARKERS BEFORE SELECTING BEST
+                    valid_indices = []
+                    for i, cls_id in enumerate(classes):
+                        class_name = model.names[int(cls_id)]
+                        if class_name.lower() != "marker":
+                            valid_indices.append(i)
+                    
+                    # Check if we have any valid (non-marker) detections
+                    if not valid_indices:
+                        print(f"\n⚠️ Only MARKER detected for Obstacle {ACTIVE_SNAP_ID} - No valid characters visible")
+                        last_sent_snap_id = ACTIVE_SNAP_ID
+                        SNAP_ARMED = False
+                        continue
+                    
+                    # Get highest confidence VALID detection
+                    valid_confs = [confs[i] for i in valid_indices]
+                    best_valid_idx = valid_indices[np.argmax(valid_confs)]
+                    top_cls_id = int(classes[best_valid_idx])
                     target_name = model.names[top_cls_id]
-                    confidence = float(confs[best_idx])
-
+                    confidence = float(confs[best_valid_idx])
+                    
+                    # Get display name and image ID
+                    display_name, image_id = get_display_info(target_name)
+                    
                     # Get annotated image with bounding boxes
                     annotated = results[0].plot()
-
+                    
                     print(f"\n{'='*60}")
                     print(f"📸 DETECTION CAPTURED!")
                     print(f"   Obstacle ID: {ACTIVE_SNAP_ID}")
-                    print(f"   Target: {target_name}")
+                    print(f"   Detected: {display_name}")
+                    print(f"   Image ID: {image_id}")
                     print(f"   Confidence: {confidence:.2%}")
                     print(f"{'='*60}\n")
-
-                    # Save images locally (RAW with bounding boxes)
-                    saved_path = save_detection_image(ACTIVE_SNAP_ID, target_name, raw_img, annotated)
-
+                    
+                    # Save images locally
+                    saved_path = save_detection_image(
+                        ACTIVE_SNAP_ID, target_name, display_name, image_id, raw_img, annotated
+                    )
+                    
                     # Send result back to RPi
                     final_result_string = f"TARGET,{ACTIVE_SNAP_ID},{target_name}"
                     s_log.sendall((final_result_string + "\n").encode('utf-8'))
                     print(f"✅ SENT TO RPi: {final_result_string}\n")
-
+                    
                     # Update tracking
                     last_sent_snap_id = ACTIVE_SNAP_ID
                     SNAP_ARMED = False
