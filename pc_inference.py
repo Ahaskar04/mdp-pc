@@ -31,40 +31,40 @@ DETECTED_IMAGES = []  # List of tuples: (obstacle_id, display_name, image_id, an
 # Maps model class names to their display names and image IDs
 IMAGE_ID_MAP = {
     # Numbers 11-19 in model → 1-9 in dataset
-    '11': {'name': 'Number 1', 'id': '1'},
-    '12': {'name': 'Number 2', 'id': '2'},
-    '13': {'name': 'Number 3', 'id': '3'},
-    '14': {'name': 'Number 4', 'id': '4'},
-    '15': {'name': 'Number 5', 'id': '5'},
-    '16': {'name': 'Number 6', 'id': '6'},
-    '17': {'name': 'Number 7', 'id': '7'},
-    '18': {'name': 'Number 8', 'id': '8'},
-    '19': {'name': 'Number 9', 'id': '9'},
+    '11': {'name': 'Number 1', 'id': '11'},
+    '12': {'name': 'Number 2', 'id': '12'},
+    '13': {'name': 'Number 3', 'id': '13'},
+    '14': {'name': 'Number 4', 'id': '14'},
+    '15': {'name': 'Number 5', 'id': '15'},
+    '16': {'name': 'Number 6', 'id': '16'},
+    '17': {'name': 'Number 7', 'id': '17'},
+    '18': {'name': 'Number 8', 'id': '18'},
+    '19': {'name': 'Number 9', 'id': '19'},
     
     # Letters 20-32 in model → a-z in dataset
-    '20': {'name': 'Alphabet A', 'id': 'a'},
-    '21': {'name': 'Alphabet B', 'id': 'b'},
-    '22': {'name': 'Alphabet C', 'id': 'c'},
-    '23': {'name': 'Alphabet D', 'id': 'd'},
-    '24': {'name': 'Alphabet E', 'id': 'e'},
-    '25': {'name': 'Alphabet F', 'id': 'f'},
-    '26': {'name': 'Alphabet G', 'id': 'g'},
-    '27': {'name': 'Alphabet H', 'id': 'h'},
-    '28': {'name': 'Alphabet S', 'id': 's'},
-    '29': {'name': 'Alphabet T', 'id': 't'},
-    '30': {'name': 'Alphabet U', 'id': 'u'},
-    '31': {'name': 'Alphabet V', 'id': 'v'},
-    '32': {'name': 'Alphabet W', 'id': 'w'},
-    '33': {'name': 'Alphabet X', 'id': 'x'},
-    '34': {'name': 'Alphabet Y', 'id': 'y'},
-    '35': {'name': 'Alphabet Z', 'id': 'z'},
-    
+    '20': {'name': 'Alphabet A', 'id': '20'},
+    '21': {'name': 'Alphabet B', 'id': '21'},
+    '22': {'name': 'Alphabet C', 'id': '22'},
+    '23': {'name': 'Alphabet D', 'id': '23'},
+    '24': {'name': 'Alphabet E', 'id': '24'},
+    '25': {'name': 'Alphabet F', 'id': '25'},
+    '26': {'name': 'Alphabet G', 'id': '26'},
+    '27': {'name': 'Alphabet H', 'id': '27'},
+    '28': {'name': 'Alphabet S', 'id': '28'},
+    '29': {'name': 'Alphabet T', 'id': '29'},
+    '30': {'name': 'Alphabet U', 'id': '30'},
+    '31': {'name': 'Alphabet V', 'id': '31'},
+    '32': {'name': 'Alphabet W', 'id': '32'},
+    '33': {'name': 'Alphabet X', 'id': '33'},
+    '34': {'name': 'Alphabet Y', 'id': '34'},
+    '35': {'name': 'Alphabet Z', 'id': '35'},
+
     # Arrows and symbols
-    '36': {'name': 'Up Arrow', 'id': 'up'},
-    '37': {'name': 'Down Arrow', 'id': 'down'},
-    '38': {'name': 'Left Arrow', 'id': 'left'},
-    '39': {'name': 'Right Arrow', 'id': 'right'},
-    '40': {'name': 'Circle', 'id': 'circle'},
+    '36': {'name': 'Up Arrow', 'id': '36'},
+    '37': {'name': 'Down Arrow', 'id': '37'},
+    '38': {'name': 'Left Arrow', 'id': '38'},
+    '39': {'name': 'Right Arrow', 'id': '39'},
+    '40': {'name': 'Circle', 'id': '40'},
 }
 
 def get_display_info(model_class_name):
@@ -311,12 +311,16 @@ def main():
                     classes = boxes.cls.cpu().numpy()
                     confs = boxes.conf.cpu().numpy()
                     
-                    # ✅ FILTER OUT MARKERS BEFORE SELECTING BEST
+                    # ✅ FILTER OUT MARKERS AND COLLECT BOUNDING BOXES
                     valid_indices = []
+                    valid_boxes = []
                     for i, cls_id in enumerate(classes):
                         class_name = model.names[int(cls_id)]
                         if class_name.lower() != "marker":
                             valid_indices.append(i)
+                            # Get bounding box coordinates
+                            box = boxes.xyxy[i].cpu().numpy()  # [x1, y1, x2, y2]
+                            valid_boxes.append(box)
                     
                     # Check if we have any valid (non-marker) detections
                     if not valid_indices:
@@ -325,12 +329,18 @@ def main():
                         SNAP_ARMED = False
                         continue
                     
-                    # Get highest confidence VALID detection
-                    valid_confs = [confs[i] for i in valid_indices]
-                    best_valid_idx = valid_indices[np.argmax(valid_confs)]
+                    # 🎯 SELECT DETECTION WITH LARGEST BOUNDING BOX (CLOSEST TO CAMERA)
+                    box_areas = []
+                    for box in valid_boxes:
+                        x1, y1, x2, y2 = box
+                        area = (x2 - x1) * (y2 - y1)
+                        box_areas.append(area)
+                    
+                    best_valid_idx = valid_indices[np.argmax(box_areas)]
                     top_cls_id = int(classes[best_valid_idx])
                     target_name = model.names[top_cls_id]
                     confidence = float(confs[best_valid_idx])
+                    box_area = box_areas[np.argmax(box_areas)]
                     
                     # Get display name and image ID
                     display_name, image_id = get_display_info(target_name)
@@ -344,6 +354,8 @@ def main():
                     print(f"   Detected: {display_name}")
                     print(f"   Image ID: {image_id}")
                     print(f"   Confidence: {confidence:.2%}")
+                    print(f"   Bounding Box Area: {box_area:.0f} pixels")
+                    print(f"   Selection Method: LARGEST BOX (Closest)")
                     print(f"{'='*60}\n")
                     
                     # Save images locally
